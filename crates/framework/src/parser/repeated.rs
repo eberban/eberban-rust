@@ -3,7 +3,7 @@ use std::ops::{Bound, RangeBounds};
 
 use easy_ext::ext;
 
-use crate::{OptionInErr, OptionInOk, ParseResult, Parser, Span, Stream};
+use crate::{OptionInErr, OptionInOk, ParseResult, Parser, Stream};
 
 type RepeatedIndex = u32;
 
