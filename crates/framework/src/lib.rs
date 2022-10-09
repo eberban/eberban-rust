@@ -12,17 +12,17 @@
 //! [Eberban] which is current made on top of [`pegjs`], into a Rust parser with
 //! better error reporting and multi-stage parsing.
 //!
-//! | PEG | Equivalent
-//! |:----|:----
-//! | `a b` | `a.then(b)`
-//! | `a / b` | `a.or(b)`
-//! | `a &b` | `a.then_peek(b)`
-//! | `a !b` | `a.then_peek(b.not())`
-//! | `a?` | `a.opt()` **(TODO)**
-//! | `a*` | `a.repeated(..)`
-//! | `a+` | `a.repeated(1..)`
-//! | `.` | `any()` **(TODO)**
-//! | `[chars]` | `one_of(chars)`
+//! | PEG       | Equivalent
+//! |:----------|:----
+//! | `a b`     | [`a.then(b)`](ThenExt::then)
+//! | `a / b`   | [`a.or(b)`](OrExt::or)
+//! | `a &b`    | [`a.then_peek(b)`](ThenPeekExt::then_peek)
+//! | `a !b`    | [`a.then_peek(b.not())`](NotExt::not)
+//! | `a?`      | [`a.opt()`](OptExt::opt)
+//! | `a*`      | [`a.repeated(..)`](RepeatedExt::repeated)
+//! | `a+`      | [`a.repeated(1..)`](RepeatedExt::repeated)
+//! | `.`       | [`any()`](any)
+//! | `[chars]` | [`one_of(chars)`](one_of)
 //!
 //! # Spans
 //!
@@ -59,7 +59,7 @@ use easy_ext::ext;
 
 /// Alias of `Result<Option<O>, E>` which is returned by [`Parser::parse`] and
 /// [`Stream::next`].
-/// 
+///
 /// `None` is used to represent an operation that didn't worked but that isn't
 /// fatal, as opposed to `Err(_)` which should most of the time be propagated
 /// upward.
@@ -82,7 +82,7 @@ pub impl<T, E> Result<T, Option<E>> {
     }
 }
 
-/// Convertion for `Result<Option<T>, E>` to `Result<T, Option<E>>`.
+/// Convertion from `Result<Option<T>, E>` to `Result<T, Option<E>>`.
 #[ext(OptionInErr)]
 pub impl<T, E> Result<Option<T>, E> {
     fn option_in_err(self) -> Result<T, Option<E>> {

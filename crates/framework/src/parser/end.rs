@@ -2,11 +2,11 @@ use std::marker::PhantomData;
 
 use crate::{ParseResult, Parser, Stream};
 
-#[derive(Debug, Clone, Copy)]
 /// See [`end`].
-pub struct End<I, E>(PhantomData<(I, E)>);
+#[derive(Debug, Clone, Copy)]
+pub struct End<S, E>(PhantomData<(S, E)>);
 
-impl<S, I, E> Parser<S, I, ()> for End<I, E> {
+impl<S, I, E> Parser<S, I, ()> for End<S, E> {
     type Error = E;
 
     fn parse(&self, stream: &mut S) -> ParseResult<(), Self::Error>
@@ -21,6 +21,6 @@ impl<S, I, E> Parser<S, I, ()> for End<I, E> {
 }
 
 /// Parse the end of the input, failing if the end is not reached.
-pub fn end<I, E>() -> End<I, E> {
+pub fn end<S, E>() -> End<S, E> {
     End(PhantomData)
 }

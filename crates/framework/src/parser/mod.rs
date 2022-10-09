@@ -1,8 +1,10 @@
+mod any;
 mod end;
 mod map;
 mod nil;
 mod not;
 mod one_of;
+mod opt;
 mod or;
 mod or_error;
 mod recursive;
@@ -15,8 +17,8 @@ mod then_peek_with;
 mod then_with;
 
 pub use {
-    end::*, map::*, nil::*, not::*, one_of::*, or::*, or_error::*, recursive::*, repeated::*,
-    spanned::*, then::*, then_error::*, then_peek::*, then_peek_with::*, then_with::*,
+    any::*, end::*, map::*, nil::*, not::*, one_of::*, opt::*, or::*, or_error::*, recursive::*,
+    repeated::*, spanned::*, then::*, then_error::*, then_peek::*, then_peek_with::*, then_with::*,
 };
 
 use crate::{ParseResult, Stream};
