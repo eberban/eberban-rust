@@ -15,7 +15,7 @@
 //! | PEG       | Equivalent
 //! |:----------|:----
 //! | `a b`     | [`a.then(b)`](ThenExt::then)
-//! | `a / b`   | [`a.or(b)`](OrExt::or)
+//! | `a / b`   | [`a.or(b)`](OrExt::or) or [`choice((a,b))`](choice)
 //! | `a &b`    | [`a.then_peek(b)`](ThenPeekExt::then_peek)
 //! | `a !b`    | [`a.then_peek(b.not())`](NotExt::not)
 //! | `a?`      | [`a.opt()`](OptExt::opt)

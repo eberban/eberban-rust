@@ -14,6 +14,9 @@ where
     ///
     /// Returns the output of either `Self` and `B` which must have the same
     /// output type.
+    /// 
+    /// If one wants to chain many ors, prefer using [`choice`](super::choice())
+    /// instead.
     fn or<B>(self, other: B) -> Or<Self, B>
     where
         B: Parser<S, I, O, Error = Self::Error>,
