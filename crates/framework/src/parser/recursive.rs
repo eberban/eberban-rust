@@ -38,9 +38,14 @@ impl<'a, S, I, O, E> Parser<S, I, O> for Recursive<'a, S, I, O, E> {
         S: Stream<I, Self::Error>,
     {
         stream.transaction(|stream| {
-            self.0.try_borrow()
-            .expect("you must not call `parse` directly inside the definition of a recursive Parser.")
-            .as_ref().expect("some parser is in place").parse(stream)
+            self.0
+                .borrow()
+                .as_ref()
+                .expect(
+                    "you must not call `parse` directly inside the definition \
+                    of a recursive parser.",
+                )
+                .parse(stream)
         })
     }
 }
