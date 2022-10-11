@@ -1,6 +1,7 @@
 mod any;
 mod choice;
 mod dbg;
+mod discard_error;
 mod end;
 mod map;
 mod nil;
@@ -19,9 +20,9 @@ mod then_peek_with;
 mod then_with;
 
 pub use {
-    any::*, choice::*, dbg::*, end::*, map::*, nil::*, not::*, one_of::*, opt::*, or::*,
-    or_error::*, recursive::*, repeated::*, spanned::*, then::*, then_error::*, then_peek::*,
-    then_peek_with::*, then_with::*,
+    any::*, choice::*, dbg::*, discard_error::*, end::*, map::*, nil::*, not::*, one_of::*, opt::*,
+    or::*, or_error::*, recursive::*, repeated::*, spanned::*, then::*, then_error::*,
+    then_peek::*, then_peek_with::*, then_with::*,
 };
 
 use crate::{ParseResult, Stream};
