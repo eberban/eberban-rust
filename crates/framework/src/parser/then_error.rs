@@ -40,9 +40,17 @@ where
     where
         S: Stream<I, Self::Error>,
     {
-        stream.transaction(|stream| match self.0.parse(stream)? {
-            None => Ok(Some(())),
-            Some(out_a) => Err(self.1(stream.span(), out_a)),
-        })
+        // we want to rollback in every case
+        let (res, span) = match stream
+            .transaction(|stream| Err::<(), _>((self.0.parse(stream), stream.span())))
+        {
+            Err(v) => v,
+            _ => unreachable!(),
+        };
+
+        match res? {
+            None => Ok(None),
+            Some(out_a) => Err(self.1(span, out_a)),
+        }
     }
 }
