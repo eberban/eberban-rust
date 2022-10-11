@@ -27,3 +27,19 @@ impl<'a, T: Clone> AsIter<T> for &'a [T] {
         self.iter().cloned()
     }
 }
+
+impl<T: Clone, const N: usize> AsIter<T> for [T; N] {
+    type Iter = std::array::IntoIter<T, N>;
+
+    fn as_iter(&self) -> Self::Iter {
+        IntoIterator::into_iter(self.clone())
+    }
+}
+
+impl<T: Clone> AsIter<T> for Vec<T> {
+    type Iter = std::vec::IntoIter<T>;
+
+    fn as_iter(&self) -> Self::Iter {
+        IntoIterator::into_iter(self.clone())
+    }
+}
