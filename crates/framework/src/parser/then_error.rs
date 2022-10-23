@@ -17,7 +17,7 @@ where
     /// what `Self` parsed.
     ///
     /// Returns the output of `Self`.
-    fn then_error<F>(self, error: F) -> ThenError<Self, O, F>
+    fn then_error<F>(self, error: F) -> ThenError<S, Self, O, F>
     where
         F: Fn(Span, O) -> Self::Error,
     {
@@ -27,9 +27,9 @@ where
 
 /// See [`then_error`](ThenErrorExt::then_error).
 #[derive(Debug, Clone, Copy)]
-pub struct ThenError<A, O, F>(A, F, PhantomData<O>);
+pub struct ThenError<S, A, O, F>(A, F, PhantomData<(S, O)>);
 
-impl<S, A, I, O, E, F> Parser<S, I, ()> for ThenError<A, O, F>
+impl<S, A, I, O, E, F> Parser<S, I, ()> for ThenError<S, A, O, F>
 where
     A: Parser<S, I, O, Error = E>,
     F: Fn(Span, O) -> E,

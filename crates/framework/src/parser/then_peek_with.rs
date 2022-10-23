@@ -14,7 +14,7 @@ where
     ///
     /// [`then_peek`]: super::ThenPeekExt::then_peek
     /// [`then_with`]: super::ThenWithExt::then_with
-    fn then_peek_with<B, BO, F>(self, f: F) -> ThenPeekWith<Self, B, AO, BO, Self::Error, F>
+    fn then_peek_with<B, BO, F>(self, f: F) -> ThenPeekWith<S, Self, B, AO, BO, Self::Error, F>
     where
         B: Parser<S, I, BO, Error = Self::Error>,
         AO: Clone,
@@ -26,9 +26,9 @@ where
 
 /// See [`then_peek_with`](ThenPeekWithExt::then_peek_with).
 #[derive(Debug, Clone, Copy)]
-pub struct ThenPeekWith<A, B, AO, BO, E, F>(A, F, PhantomData<(B, AO, BO, E)>);
+pub struct ThenPeekWith<S, A, B, AO, BO, E, F>(A, F, PhantomData<(S, B, AO, BO, E)>);
 
-impl<S, A, B, I, AO, BO, E, F> Parser<S, I, AO> for ThenPeekWith<A, B, AO, BO, E, F>
+impl<S, A, B, I, AO, BO, E, F> Parser<S, I, AO> for ThenPeekWith<S, A, B, AO, BO, E, F>
 where
     A: Parser<S, I, AO, Error = E>,
     B: Parser<S, I, BO, Error = E>,

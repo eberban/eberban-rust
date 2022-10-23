@@ -16,7 +16,7 @@ where
     /// what `Self` parsed.
     ///
     /// Returns only the output of `Self`.
-    fn then_peek<B, BO>(self, other: B) -> ThenPeek<Self, B, BO>
+    fn then_peek<B, BO>(self, other: B) -> ThenPeek<S, Self, B, BO>
     where
         B: Parser<S, I, BO, Error = Self::Error>,
     {
@@ -26,9 +26,9 @@ where
 
 /// See [`then_peek`](ThenPeekExt::then_peek).
 #[derive(Debug, Clone, Copy)]
-pub struct ThenPeek<A, B, BO>(A, B, PhantomData<BO>);
+pub struct ThenPeek<S, A, B, BO>(A, B, PhantomData<(S, BO)>);
 
-impl<S, A, B, I, AO, BO, E> Parser<S, I, AO> for ThenPeek<A, B, BO>
+impl<S, A, B, I, AO, BO, E> Parser<S, I, AO> for ThenPeek<S, A, B, BO>
 where
     A: Parser<S, I, AO, Error = E>,
     B: Parser<S, I, BO, Error = E>,

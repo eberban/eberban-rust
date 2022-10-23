@@ -18,7 +18,7 @@ where
     /// Returns the output of both `Self` and `B`.
     /// Since the output of `Self` is used both in the function and as an
     /// output, it must implement `Clone`.
-    fn then_with<F, B, BO>(self, f: F) -> ThenWith<Self, B, AO, Self::Error, F>
+    fn then_with<F, B, BO>(self, f: F) -> ThenWith<S, Self, B, AO, Self::Error, F>
     where
         B: Parser<S, I, BO, Error = Self::Error>,
         AO: Clone,
@@ -30,9 +30,9 @@ where
 
 /// See [`then_with`](ThenWithExt::then_with).
 #[derive(Debug, Clone, Copy)]
-pub struct ThenWith<A, B, AO, E, F>(A, F, PhantomData<(B, AO, E)>);
+pub struct ThenWith<S, A, B, AO, E, F>(A, F, PhantomData<(S, B, AO, E)>);
 
-impl<S, A, B, I, AO, BO, E, F> Parser<S, I, (AO, BO)> for ThenWith<A, B, AO, E, F>
+impl<S, A, B, I, AO, BO, E, F> Parser<S, I, (AO, BO)> for ThenWith<S, A, B, AO, E, F>
 where
     A: Parser<S, I, AO, Error = E>,
     B: Parser<S, I, BO, Error = E>,
