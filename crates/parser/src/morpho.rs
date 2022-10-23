@@ -1,6 +1,23 @@
 use framework::*;
 
-fn raw_letter<S, E>(choices: &[u8]) -> impl Parser<S, u8, char, Error = E> {
+pub fn hyphen_opt<S>() -> impl Parser<S, u8, (), Error = super::Error> {
+    let pattern = [b'-'];
+    one_of::<_, u8, super::Error>(pattern)
+        .then_peek(
+            one_of(pattern)
+                .then_error(|span, _| {
+                    (
+                        span.expand_before(1),
+                        "Only one hyphen is allowed in a row.".to_string(),
+                    )
+                })
+                .opt(),
+        )
+        .opt()
+        .map(|_| ())
+}
+
+fn raw_letter<S>(choices: &[u8]) -> impl Parser<S, u8, char, Error = super::Error> {
     choice(
         choices
             .into_iter()
@@ -8,7 +25,15 @@ fn raw_letter<S, E>(choices: &[u8]) -> impl Parser<S, u8, char, Error = E> {
                 let pattern = [c.to_ascii_lowercase(), c.to_ascii_uppercase()];
                 let out = char::from(c);
 
-                one_of(pattern).repeated(1..).map(move |_| out)
+                one_of(pattern).repeated(1..)
+                    .then_peek(
+                        hyphen_opt().then(one_of(pattern))
+                            .then_error(|span,_| {
+                                (span.expand_before(1), "The same consonant cannot appear both before and after an hyphen.".to_string())
+                            })
+                            .opt()
+                    )
+                    .map(move |_| out)
             })
             .collect::<Vec<_>>(),
     )
@@ -48,19 +73,25 @@ fn other<S>() -> impl Parser<S, u8, char, Error = super::Error> {
     choice((
         raw_letter(b"vfkgm"),
         raw_letter(b"pb").then_peek_with(move |c1| {
-            raw_letter(b"n")
-                .then_error(move |span, c2| (span, error(c1, c2)))
-                .or(nil())
+            hyphen_opt().then(
+                raw_letter(b"n")
+                    .then_error(move |span, c2| (span, error(c1, c2)))
+                    .opt(),
+            )
         }),
         raw_letter(b"td").then_peek_with(move |c1| {
-            raw_letter(b"nl")
-                .then_error(move |span, c2| (span, error(c1, c2)))
-                .or(nil())
+            hyphen_opt().then(
+                raw_letter(b"nl")
+                    .then_error(move |span, c2| (span, error(c1, c2)))
+                    .opt(),
+            )
         }),
         raw_letter(b"n").then_peek_with(move |c1| {
-            liquid()
-                .then_error(move |span, c2| (span, error(c1, c2)))
-                .or(nil())
+            hyphen_opt().then(
+                liquid()
+                    .then_error(move |span, c2| (span, error(c1, c2)))
+                    .opt(),
+            )
         }),
     ))
 }
@@ -71,12 +102,13 @@ fn raw_consonant<S>() -> impl Parser<S, u8, char, Error = super::Error> {
 
 /// Parse a single consonant with morphology checks.
 pub fn consonant<S>() -> impl Parser<S, u8, char, Error = super::Error> {
-    let error1 =
-        move |(c1, c2)| format!("A sibilant ({c1}) cannot be followed by another sibilant ({c2}).");
-    let error2 = move |(c1, c2)| {
+    let error1 = move |((c1, _), c2)| {
+        format!("A sibilant ({c1}) cannot be followed by another sibilant ({c2}).")
+    };
+    let error2 = move |((c1, _), c2)| {
         format!("A voiced consonant ({c1}) cannot be followed by an unvoiced one ({c2}).")
     };
-    let error3 = move |(c1, c2)| {
+    let error3 = move |((c1, _), c2)| {
         format!("An unvoiced consonant ({c1}) cannot be followed by an voiced one ({c2}).")
     };
 
@@ -84,12 +116,15 @@ pub fn consonant<S>() -> impl Parser<S, u8, char, Error = super::Error> {
     nil()
         .then_peek(choice((
             sibilant()
+                .then(hyphen_opt())
                 .then(sibilant())
                 .then_error(move |span, pair| (span, error1(pair))),
             voiced()
+                .then(hyphen_opt())
                 .then(unvoiced())
                 .then_error(move |span, pair| (span, error2(pair))),
             unvoiced()
+                .then(hyphen_opt())
                 .then(voiced())
                 .then_error(move |span, pair| (span, error3(pair))),
             nil(), // No forbidden pattern found, we successfully parse `()`.
@@ -140,12 +175,22 @@ pub fn medial_pair<S>() -> impl Parser<S, u8, (char, char), Error = super::Error
     nil()
         .then_peek(choice((
             // Valid patterns (might contain pairs forbidden by `consonant`)
-            liquid().then(raw_letter(b"n")).map(|_| ()),
-            raw_letter(b"n").then(liquid()).map(|_| ()),
+            liquid()
+                .then(hyphen_opt())
+                .then(raw_letter(b"n"))
+                .map(|_| ()),
+            raw_letter(b"n")
+                .then(hyphen_opt())
+                .then(liquid())
+                .map(|_| ()),
             raw_letter(b"fv")
+                .then(hyphen_opt())
                 .then(raw_letter(b"m").or(plosive()))
                 .map(|_| ()),
-            plosive().then(raw_letter(b"fvm").or(plosive())).map(|_| ()),
+            plosive()
+                .then(hyphen_opt())
+                .then(raw_letter(b"fvm").or(plosive()))
+                .map(|_| ()),
             // We just don't parse and don't emit an error, as usually if this
             // is not a medial pair it is an initial pair which starts the next
             // word.
@@ -153,9 +198,11 @@ pub fn medial_pair<S>() -> impl Parser<S, u8, (char, char), Error = super::Error
         // Actually parse the pair
         .then(consonant())
         .map(|(_, c)| c)
+        .then(hyphen_opt())
+        .map(|(c, _)| c)
         .then(consonant())
-        // Can be followed by a consonant in borrowings triplets, thus we don't
-        // perform a check.
+    // Can be followed by a consonant in borrowings triplets, thus we don't
+    // perform a check.
 }
 
 #[cfg(test)]
@@ -191,11 +238,29 @@ mod tests {
                 );
             }
         }
+
+        // Initial pair cannot contain hyphen.
+        let parser = initial_pair().then_peek(end());
+
+        for c1 in b'a'..=b'z' {
+            for c2 in b'a'..=b'z' {
+                assert_eq!(
+                    parser
+                        .parse(&mut IterStream::new([c1, b'-', c2]))
+                        .option_in_err()
+                        .is_ok(),
+                    false,
+                    "Mismatch for {}-{}, initial pair cannot contain hyphen",
+                    char::from(c1),
+                    char::from(c2)
+                );
+            }
+        }
     }
 
     #[test]
     fn medial_pairs() {
-        let initial_pairs: Vec<_> = [
+        let medial_pairs: Vec<_> = [
             "bd", "bg", "bm", "bv", "db", "dg", "dm", "dv", "fk", "fm", "fp", "ft", "gb", "gd",
             "gm", "gv", "kf", "km", "kp", "kt", "pf", "pk", "pm", "pt", "tf", "tk", "tm", "tp",
             "vb", "vd", "vg", "vm", "nl", "nr", "ln", "rn",
@@ -213,8 +278,25 @@ mod tests {
                         .parse(&mut IterStream::new([c1, c2]))
                         .option_in_err()
                         .is_ok(),
-                    initial_pairs.contains(&&[c1, c2][..]),
+                    medial_pairs.contains(&&[c1, c2][..]),
                     "Mismatch for {}{}",
+                    char::from(c1),
+                    char::from(c2)
+                );
+            }
+        }
+
+        let parser = medial_pair().then_peek(end());
+
+        for c1 in b'a'..=b'z' {
+            for c2 in b'a'..=b'z' {
+                assert_eq!(
+                    parser
+                        .parse(&mut IterStream::new([c1, b'-', c2]))
+                        .option_in_err()
+                        .is_ok(),
+                    medial_pairs.contains(&&[c1, c2][..]),
+                    "Mismatch for {}-{}",
                     char::from(c1),
                     char::from(c2)
                 );
