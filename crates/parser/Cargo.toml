@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 framework = { path = "../framework", package = "ebb_parsing_framework" }
+ariadne = "0.1.5"
