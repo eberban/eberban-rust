@@ -17,7 +17,7 @@
 //! | `a b`     | [`a.then(b)`](ThenExt::then)
 //! | `a / b`   | [`a.or(b)`](OrExt::or) or [`choice((a,b))`](choice)
 //! | `a &b`    | [`a.then_peek(b)`](ThenPeekExt::then_peek)
-//! | `a !b`    | [`a.then_peek(b.not())`](NotExt::not)
+//! | `a !b`    | [`a.then_peek(not(b))`](not)
 //! | `a?`      | [`a.opt()`](OptExt::opt)
 //! | `a*`      | [`a.repeated(..)`](RepeatedExt::repeated)
 //! | `a+`      | [`a.repeated(1..)`](RepeatedExt::repeated)
@@ -39,7 +39,7 @@
 //! [`then_error`] turns a successful parse into an
 //! error. As the latter allows to access the output of the parse, it is better
 //! to write `a.then_peek(b.then_error(|span, err| ...))` than
-//! `a.then_peek(b.not().or_error(|span| ...))`.
+//! `a.then_peek(not(b).or_error(|span| ...))`.
 //!
 //! [`chumsky`]: https://github.com/zesterer/chumsky
 //! [Eberban]: https://github.com/eberban/eberban

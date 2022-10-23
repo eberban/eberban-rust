@@ -1,24 +1,15 @@
 use std::marker::PhantomData;
 
-use easy_ext::ext;
-
 use crate::{ParseResult, Parser, Stream};
 
-/// Provide [`not`](Self::not) method to all [`Parser`].
-#[ext(NotExt)]
-pub impl<Self_, S, I, O> Self_
-where
-    Self: Sized + Parser<S, I, O>,
-{
-    /// Don't parse if `Self` parses, otherwise returns `()`.
-    ///
-    /// However if `Self` returns an error it propagates it.
-    fn not(self) -> Not<Self, O> {
-        Not(self, PhantomData)
-    }
+/// Don't parse if `parser` parses, otherwise returns `()`.
+///
+/// However if `parser` returns an error it propagates it.
+pub fn not<S, I, O, P: Parser<S, I, O>>(parser: P) -> Not<P, O> {
+    Not(parser, PhantomData)
 }
 
-/// See [`not`](NotExt::not).
+/// See [`not`](not).
 #[derive(Debug, Clone, Copy)]
 pub struct Not<A, O>(A, PhantomData<O>);
 
