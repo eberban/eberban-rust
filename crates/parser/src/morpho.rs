@@ -1,6 +1,6 @@
 use framework::*;
 
-pub fn hyphen_opt<S>() -> impl Parser<S, u8, (), Error = super::Error> {
+fn hyphen_opt<S>() -> impl Parser<S, u8, (), Error = super::Error> {
     let pattern = [b'-'];
     one_of::<_, u8, super::Error>(pattern)
         .then_peek(
@@ -29,7 +29,7 @@ fn raw_letter<S>(choices: &[u8]) -> impl Parser<S, u8, char, Error = super::Erro
                     .then_peek(
                         hyphen_opt().then(one_of(pattern))
                             .then_error(|span,_| {
-                                (span.expand_before(1), "The same consonant cannot appear both before and after an hyphen.".to_string())
+                                (span.expand_before(1), "The same letter cannot appear both before and after an hyphen.".to_string())
                             })
                             .opt()
                     )
@@ -65,6 +65,23 @@ fn sonorant<S>() -> impl Parser<S, u8, char, Error = super::Error> {
 
 fn liquid<S>() -> impl Parser<S, u8, char, Error = super::Error> {
     raw_letter(b"lr")
+}
+
+fn letter_h<S>() -> impl Parser<S, u8, char, Error = super::Error> {
+    raw_letter(b"h")
+        .spanned()
+        .then_peek_with(move |(span_h, _)| {
+            one_of([b'-'])
+                .then_error(move |_, _| {
+                    (
+                        span_h.expand_after(1),
+                        "An hyphen cannot appear after an 'h', and should appear before instead."
+                            .to_string(),
+                    )
+                })
+                .opt()
+        })
+        .map(|(_, h)| h)
 }
 
 fn other<S>() -> impl Parser<S, u8, char, Error = super::Error> {
@@ -205,6 +222,25 @@ pub fn medial_pair<S>() -> impl Parser<S, u8, (char, char), Error = super::Error
     // perform a check.
 }
 
+pub fn particle_form<S>() -> impl Parser<S, u8, String, Error = super::Error> {
+    consonant()
+        .then(vowel())
+        .then(
+            hyphen_opt()
+                .then(letter_h().opt())
+                .then(vowel())
+                .map(|((_hyphen, h), vowel)| format!("{}{vowel}", h.map(|_| "h").unwrap_or("")))
+                .repeated(..),
+        )
+        // Ensure it is not followed by a sonorant or medial pair, in which case
+        // it is not a particle but a root.
+        .then_peek(not(choice((
+            sonorant().map(|_| ()),
+            medial_pair().map(|_| ()),
+        ))))
+        .map(|((c1, v1), tail)| format!("{c1}{v1}{}", tail.join("")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -302,5 +338,25 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn particle_forms() {
+        let parser = particle_form();
+
+        assert_eq!(parser.parse(&mut IterStream::new(&b"pa"[..])), Ok(Some(String::from("pa"))));
+        assert_eq!(parser.parse(&mut IterStream::new(&b"pai"[..])), Ok(Some(String::from("pai"))));
+        assert_eq!(parser.parse(&mut IterStream::new(&b"pahi"[..])), Ok(Some(String::from("pahi"))));
+        assert_eq!(parser.parse(&mut IterStream::new(&b"pa-i"[..])), Ok(Some(String::from("pai"))));
+        assert_eq!(parser.parse(&mut IterStream::new(&b"pa-hi"[..])), Ok(Some(String::from("pahi"))));
+        
+        assert_eq!(parser.parse(&mut IterStream::new(&b"papa"[..])), Ok(Some(String::from("pa"))));
+        assert_eq!(parser.parse(&mut IterStream::new(&b"papla"[..])), Ok(Some(String::from("pa"))));
+
+        assert_eq!(parser.parse(&mut IterStream::new(&b"p"[..])), Ok(None));
+        assert_eq!(parser.parse(&mut IterStream::new(&b"pafka"[..])), Ok(None));
+
+        assert!(parser.parse(&mut IterStream::new(&b"pah-i"[..])).is_err());
+        assert!(parser.parse(&mut IterStream::new(&b"pa-ai"[..])).is_err());
     }
 }
