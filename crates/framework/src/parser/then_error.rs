@@ -10,13 +10,10 @@ pub impl<Self_, S, I, O> Self_
 where
     Self: Sized + Parser<S, I, O>,
 {
-    /// Parse from `Self`, and if it fails to parse it is transformed into
+    /// Parse from `Self`, and if it succeeds to parse it is transformed into
     /// an error with the provided function.
     ///
-    /// Rollbacks if `Self` fails to parse, and stream will only progress with
-    /// what `Self` parsed.
-    ///
-    /// Returns the output of `Self`.
+    /// If `Self` didn't parse the output is `None`.
     fn then_error<F>(self, error: F) -> ThenError<S, Self, O, F>
     where
         F: Fn(Span, O) -> Self::Error,
