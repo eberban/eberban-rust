@@ -152,6 +152,17 @@ pub fn consonant<S>() -> impl Parser<S, u8, char, Error = super::Error> {
         .map(|(_, out)| out)
 }
 
+fn initial_consonant<S>() -> impl Parser<S, u8, char, Error = super::Error> {
+    nil()
+        .then_peek(
+            sonorant()
+                .then_error(|span, _| (span, "A word cannot start with a sonorant.".to_string()))
+                .opt(),
+        )
+        .then(consonant())
+        .map(|(_, c)| c)
+}
+
 pub fn initial_pair<S>() -> impl Parser<S, u8, (char, char), Error = super::Error> {
     let err_medial = |(c1, c2)| {
         format!("Expected an initial consonant pair but found '{c1}{c2}' which is a medial consonant pair.")
@@ -223,7 +234,7 @@ pub fn medial_pair<S>() -> impl Parser<S, u8, (char, char), Error = super::Error
 }
 
 pub fn particle_form<S>() -> impl Parser<S, u8, String, Error = super::Error> {
-    consonant()
+    initial_consonant()
         .then(vowel())
         .then(
             hyphen_opt()
@@ -344,19 +355,27 @@ mod tests {
     fn particle_forms() {
         let parser = particle_form();
 
-        assert_eq!(parser.parse(&mut IterStream::new(&b"pa"[..])), Ok(Some(String::from("pa"))));
-        assert_eq!(parser.parse(&mut IterStream::new(&b"pai"[..])), Ok(Some(String::from("pai"))));
-        assert_eq!(parser.parse(&mut IterStream::new(&b"pahi"[..])), Ok(Some(String::from("pahi"))));
-        assert_eq!(parser.parse(&mut IterStream::new(&b"pa-i"[..])), Ok(Some(String::from("pai"))));
-        assert_eq!(parser.parse(&mut IterStream::new(&b"pa-hi"[..])), Ok(Some(String::from("pahi"))));
-        
-        assert_eq!(parser.parse(&mut IterStream::new(&b"papa"[..])), Ok(Some(String::from("pa"))));
-        assert_eq!(parser.parse(&mut IterStream::new(&b"papla"[..])), Ok(Some(String::from("pa"))));
+        let success = |pat, out| {
+            assert_eq!(
+                parser.parse(&mut IterStream::new(pat)),
+                Ok(Some(String::from(out)))
+            )
+        };
+
+        success(&b"pa"[..], "pa");
+        success(&b"pai"[..], "pai");
+        success(&b"pahi"[..], "pahi");
+        success(&b"pa-i"[..], "pai");
+        success(&b"pa-hi"[..], "pahi");
+
+        success(&b"papa"[..], "pa");
+        success(&b"papla"[..], "pa");
 
         assert_eq!(parser.parse(&mut IterStream::new(&b"p"[..])), Ok(None));
         assert_eq!(parser.parse(&mut IterStream::new(&b"pafka"[..])), Ok(None));
 
         assert!(parser.parse(&mut IterStream::new(&b"pah-i"[..])).is_err());
         assert!(parser.parse(&mut IterStream::new(&b"pa-ai"[..])).is_err());
+        assert!(parser.parse(&mut IterStream::new(&b"na"[..])).is_err());
     }
 }
