@@ -1,6 +1,6 @@
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use framework::*;
-use parser::morpho::particle_form;
+use parser::morpho::{medial_pair, particle_form, root_form};
 
 fn main() {
     println!();
@@ -8,7 +8,7 @@ fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     let text = args.join(" ");
 
-    let parser = particle_form();
+    let parser = root_form();
 
     println!("Input: {text}");
 

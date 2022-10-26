@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use framework::*;
 
 fn hyphen_opt<S>() -> impl Parser<S, u8, (), Error = super::Error> {
@@ -172,6 +174,11 @@ pub fn initial_pair<S>() -> impl Parser<S, u8, (char, char), Error = super::Erro
             "'{c1}{c2}' is a valid initial pair, but it must not be followed by another consonant."
         )
     };
+    let err_hyphen = |(c1, c2)| {
+        format!(
+            "'{c1}{c2}' is a valid initial pair, but it cannot be followed by an hyphen (only a vowel)."
+        )
+    };
 
     // We first check for valid pattern.
     nil()
@@ -194,7 +201,13 @@ pub fn initial_pair<S>() -> impl Parser<S, u8, (char, char), Error = super::Erro
         .then_peek_with(move |pair| {
             raw_consonant()
                 .then_error(move |span, _| (span, err_triplet(pair)))
-                .or(nil())
+                .opt()
+        })
+        // Forbid a following hyphen
+        .then_peek_with(move |pair| {
+            one_of([b'-'])
+                .then_error(move |span, _| (span, err_hyphen(pair)))
+                .opt()
         })
 }
 
@@ -233,9 +246,8 @@ pub fn medial_pair<S>() -> impl Parser<S, u8, (char, char), Error = super::Error
     // perform a check.
 }
 
-pub fn particle_form<S>() -> impl Parser<S, u8, String, Error = super::Error> {
-    initial_consonant()
-        .then(vowel())
+fn hieaou<S>() -> impl Parser<S, u8, String, Error = super::Error> {
+    vowel()
         .then(
             hyphen_opt()
                 .then(letter_h().opt())
@@ -243,13 +255,69 @@ pub fn particle_form<S>() -> impl Parser<S, u8, String, Error = super::Error> {
                 .map(|((_hyphen, h), vowel)| format!("{}{vowel}", h.map(|_| "h").unwrap_or("")))
                 .repeated(..),
         )
+        .map(|(v1, tail)| format!("{v1}{}", tail.join("")))
+}
+
+pub fn particle_form<S>() -> impl Parser<S, u8, String, Error = super::Error> {
+    initial_consonant()
+        .then(hieaou())
         // Ensure it is not followed by a sonorant or medial pair, in which case
         // it is not a particle but a root.
         .then_peek(not(choice((
             sonorant().map(|_| ()),
             medial_pair().map(|_| ()),
         ))))
-        .map(|((c1, v1), tail)| format!("{c1}{v1}{}", tail.join("")))
+        .map(|(c1, vtail)| format!("{c1}{vtail}"))
+}
+
+/// Root segment `(medial_pair / hyphen sonorant) hieaou`.
+fn root_segment<S>() -> impl Parser<S, u8, String, Error = super::Error> {
+    choice((
+        medial_pair().map(|(c1, c2)| format!("{c1}{c2}")),
+        hyphen_opt().then(sonorant()).map(|(_, v)| format!("{v}")),
+    ))
+    .then(hieaou())
+    .map(|(c, v)| format!("{c}{v}"))
+}
+
+/// Optional final sonorant
+fn sonorant_opt<S>() -> impl Parser<S, u8, String, Error = super::Error> {
+    sonorant()
+        .opt()
+        .map(|s| s.map(|s| format!("{s}")).unwrap_or(String::from("")))
+}
+
+pub fn root_form<S>() -> impl Parser<S, u8, String, Error = super::Error> {
+    choice((
+        initial_consonant()
+            .then(hieaou())
+            .then(sonorant())
+            .map(|((c, v), s)| format!("{c}{v}{s}")),
+        initial_consonant()
+            .then(hieaou())
+            .then(root_segment().repeated(1..))
+            .then(sonorant_opt())
+            .map(|(((c, v), r), s)| format!("{c}{v}{}{s}", r.join(""),)),
+        initial_pair()
+            .then(hieaou())
+            .then(root_segment().repeated(..))
+            .then(sonorant_opt())
+            .map(|((((c1, c2), v), r), s)| format!("{c1}{c2}{v}{}{s}", r.join(""),)),
+    ))
+    .then_peek_with(move |word| {
+        sonorant()
+            .then_error(move |span, s| {
+                (
+                    span.expand_before(1),
+                    format!(
+                        "Found word '{word}', which cannot be followed by a sonorant ({}{s} is not \
+                            a medial pair).",
+                        word.chars().last().expect("word is at least one char long")
+                    ),
+                )
+            })
+            .opt()
+    })
 }
 
 #[cfg(test)]
