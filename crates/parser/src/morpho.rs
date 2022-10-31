@@ -273,7 +273,16 @@ pub fn particle_form<S>() -> impl Parser<S, u8, String, Error = super::Error> {
 /// Root segment `(medial_pair / hyphen sonorant) hieaou`.
 fn root_segment<S>() -> impl Parser<S, u8, String, Error = super::Error> {
     choice((
-        medial_pair().map(|(c1, c2)| format!("{c1}{c2}")),
+        medial_pair().map(|(c1, c2)| format!("{c1}{c2}")).then_peek(
+            not(vowel())
+                .then_error(|span, _| {
+                    (
+                        span.expand_after(1),
+                        "Inside roots a medial pair must be followed by a vowel.".to_string(),
+                    )
+                })
+                .opt(),
+        ),
         hyphen_opt().then(sonorant()).map(|(_, v)| format!("{v}")),
     ))
     .then(hieaou())
