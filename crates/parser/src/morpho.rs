@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use framework::*;
 
 fn hyphen_opt<S>() -> impl Parser<S, u8, (), Error = super::Error> {
@@ -15,6 +13,7 @@ fn hyphen_opt<S>() -> impl Parser<S, u8, (), Error = super::Error> {
                 })
                 .opt(),
         )
+        .then(one_of([b'\n', b'\r']).repeated(..))
         .opt()
         .map(|_| ())
 }
@@ -329,6 +328,13 @@ pub fn root_form<S>() -> impl Parser<S, u8, String, Error = super::Error> {
     })
 }
 
+// fn word_separator<S>() -> impl Parser<S, u8, (), Error = super::Error>  {
+//     let space = one_of(" \t");
+
+
+//     nil()
+// }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -399,16 +405,28 @@ mod tests {
             for c2 in b'a'..=b'z' {
                 assert_eq!(
                     parser
-                        .parse(&mut IterStream::new([c1, c2]))
+                        .parse(&mut IterStream::new([c1, b'-', c2]))
                         .option_in_err()
                         .is_ok(),
                     medial_pairs.contains(&&[c1, c2][..]),
-                    "Mismatch for {}{}",
+                    "Mismatch for {}-{}",
                     char::from(c1),
                     char::from(c2)
                 );
             }
         }
+    }
+
+    #[test]
+    fn medial_pairs_with_hyphens() {
+        let medial_pairs: Vec<_> = [
+            "bd", "bg", "bm", "bv", "db", "dg", "dm", "dv", "fk", "fm", "fp", "ft", "gb", "gd",
+            "gm", "gv", "kf", "km", "kp", "kt", "pf", "pk", "pm", "pt", "tf", "tk", "tm", "tp",
+            "vb", "vd", "vg", "vm", "nl", "nr", "ln", "rn",
+        ]
+        .map(|word| word.as_bytes())
+        .into_iter()
+        .collect();
 
         let parser = medial_pair().then_peek(end());
 
@@ -421,6 +439,35 @@ mod tests {
                         .is_ok(),
                     medial_pairs.contains(&&[c1, c2][..]),
                     "Mismatch for {}-{}",
+                    char::from(c1),
+                    char::from(c2)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn medial_pairs_with_hyphens_and_line_breaks() {
+        let medial_pairs: Vec<_> = [
+            "bd", "bg", "bm", "bv", "db", "dg", "dm", "dv", "fk", "fm", "fp", "ft", "gb", "gd",
+            "gm", "gv", "kf", "km", "kp", "kt", "pf", "pk", "pm", "pt", "tf", "tk", "tm", "tp",
+            "vb", "vd", "vg", "vm", "nl", "nr", "ln", "rn",
+        ]
+        .map(|word| word.as_bytes())
+        .into_iter()
+        .collect();
+
+        let parser = medial_pair().then_peek(end());
+
+        for c1 in b'a'..=b'z' {
+            for c2 in b'a'..=b'z' {
+                assert_eq!(
+                    parser
+                        .parse(&mut IterStream::new([c1, b'-', b'\n', c2]))
+                        .option_in_err()
+                        .is_ok(),
+                    medial_pairs.contains(&&[c1, c2][..]),
+                    "Mismatch for {}-[line break]{}",
                     char::from(c1),
                     char::from(c2)
                 );
