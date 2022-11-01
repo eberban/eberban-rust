@@ -1,3 +1,5 @@
+use std::iter::Cloned;
+
 pub trait AsIter<T> {
     type Iter: Iterator<Item = T>;
 
@@ -33,6 +35,14 @@ impl<T: Clone, const N: usize> AsIter<T> for [T; N] {
 
     fn as_iter(&self) -> Self::Iter {
         IntoIterator::into_iter(self.clone())
+    }
+}
+
+impl<'a, T: Clone, const N: usize> AsIter<T> for &'a [T; N] {
+    type Iter = Cloned<std::slice::Iter<'a, T>>;
+
+    fn as_iter(&self) -> Self::Iter {
+        IntoIterator::into_iter(*self).cloned()
     }
 }
 

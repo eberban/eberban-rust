@@ -1,7 +1,7 @@
 use framework::*;
 
 fn hyphen_opt<S>() -> impl Parser<S, u8, (), Error = super::Error> {
-    let pattern = [b'-'];
+    let pattern = b"-";
     one_of::<_, u8, super::Error>(pattern)
         .then_peek(
             one_of(pattern)
@@ -13,7 +13,7 @@ fn hyphen_opt<S>() -> impl Parser<S, u8, (), Error = super::Error> {
                 })
                 .opt(),
         )
-        .then(one_of([b'\n', b'\r']).repeated(..))
+        .then(one_of(b"\n\r").repeated(..))
         .opt()
         .map(|_| ())
 }
@@ -72,7 +72,7 @@ fn letter_h<S>() -> impl Parser<S, u8, char, Error = super::Error> {
     raw_letter(b"h")
         .spanned()
         .then_peek_with(move |(span_h, _)| {
-            one_of([b'-'])
+            one_of(b"-")
                 .then_error(move |_, _| {
                     (
                         span_h.expand_after(1),
@@ -204,7 +204,7 @@ pub fn initial_pair<S>() -> impl Parser<S, u8, (char, char), Error = super::Erro
         })
         // Forbid a following hyphen
         .then_peek_with(move |pair| {
-            one_of([b'-'])
+            one_of(b"-")
                 .then_error(move |span, _| (span, err_hyphen(pair)))
                 .opt()
         })
