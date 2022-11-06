@@ -1,4 +1,4 @@
-use std::iter::Cloned;
+use std::{iter::Cloned, ops::RangeInclusive};
 
 pub trait AsIter<T> {
     type Iter: Iterator<Item = T>;
@@ -51,5 +51,16 @@ impl<T: Clone> AsIter<T> for Vec<T> {
 
     fn as_iter(&self) -> Self::Iter {
         IntoIterator::into_iter(self.clone())
+    }
+}
+
+impl<T> AsIter<T> for RangeInclusive<T>
+where
+    Self: Iterator<Item = T> + Clone,
+{
+    type Iter = Self;
+
+    fn as_iter(&self) -> Self::Iter {
+        self.clone()
     }
 }
