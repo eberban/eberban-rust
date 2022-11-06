@@ -1,6 +1,15 @@
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use framework::*;
-use parser::morpho::{medial_pair, particle_form, root_form};
+use parser::{
+    morpho::{particle_form, post_word_check, root_form, spaces},
+    Error,
+};
+
+#[derive(Debug, Clone)]
+pub enum Word {
+    Root(String),
+    Particle(String),
+}
 
 fn main() {
     println!();
@@ -8,16 +17,24 @@ fn main() {
     let args: Vec<_> = std::env::args().skip(1).collect();
     let text = args.join(" ");
 
-    let parser = root_form();
+    let parser = choice((
+        root_form().map(Word::Root),
+        particle_form().map(Word::Particle),
+    ))
+    .then(post_word_check())
+    .then(spaces().opt())
+    .map(|((w, _), _)| w)
+    .repeated(..);
 
     println!("Input: {text}");
 
-    let res: Result<_, (Span, String)> =
-        parser.parse(&mut IterStream::new(text.clone().into_bytes()));
+    let res: Result<_, Error> = parser
+        .spanned()
+        .parse(&mut IterStream::new(text.clone().into_bytes()));
 
     match res {
         Ok(ok) => println!("Success: {ok:?}"),
-        Err((span, err)) => {
+        Err(Error { span, text: err }) => {
             Report::build(ReportKind::Error, "input", 0)
                 .with_label(
                     Label::new(("input", span.into()))
