@@ -256,6 +256,32 @@ pub fn medial_pair<S>() -> impl Parser<S, u8, (char, char), Error = crate::Error
     // perform a check.
 }
 
+pub fn consonant_triplet<S>() -> impl Parser<S, u8, (char, char, char), Error = crate::Error> {
+    let consonant_pattern_1 = nil()
+        .then_peek(medial_pair())
+        .then_peek(not(sonorant()))
+        .then(consonant())
+        .then(hyphen_opt())
+        .then(initial_pair());
+
+
+    nil()
+        .then_peek(choice((consonant_pattern_1,)))
+        .then(consonant())
+        .then(consonant())
+        .then(consonant())
+        .map(|(((_, c1), c2), c3)| (c1, c2, c3))
+        .spanned()
+        .then_peek_with(|(span, (c1, c2, c3))| {
+            not(vowel()).then_error(move |_, _| {
+                span.error(format!(
+                    "'{c1}{c2}{c3}' is a valid triplet, but it should be followed by a vowel."
+                ))
+            })
+        })
+        .map(|(_, triplet)| triplet)
+}
+
 pub fn hieaou<S>() -> impl Parser<S, u8, String, Error = crate::Error> {
     vowel()
         .then(
