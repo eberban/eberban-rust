@@ -1,166 +1,102 @@
 use framework::*;
 
-use crate::SpannedErrorExt;
+use crate::{Error, SpannedErrorExt};
 
-pub fn hyphen<S>() -> impl Parser<S, u8, (), Error = crate::Error> {
-    let single_hyphen = || {
+fn pair_hyphen_opt<S, A, B>(first: A, second: B) -> impl Parser<S, u8, (char, char), Error = Error>
+where
+    A: Parser<S, u8, char, Error = Error>,
+    B: Parser<S, u8, char, Error = Error>,
+{
+    first
+        .then(hyphen_opt())
+        .then(second)
+        .map(|((c1, _), c2)| (c1, c2))
+}
+
+rules!(
+    pub other[u8 => char] = nil()
+        .then_peek(deny_other_forbidden_patterns())
+        .then(raw_letter(b"pbtdvfkgmn"))
+        .map(|(_, out)| out);
+    deny_other_forbidden_patterns[u8 => ()] = deny(
         choice((
-            exact_utf8("\u{2010}"), // ‐ HYPHEN
-            exact_utf8("\u{2014}"), // — EM DASH
-            exact_utf8("\u{002D}"), // - HYPHEN-MINUS
-        ))
-    };
+            pair_hyphen_opt(raw_letter(b"pb"), raw_letter(b"n")),
+            pair_hyphen_opt(raw_letter(b"td"), raw_letter(b"nl")),
+            pair_hyphen_opt(raw_letter(b"n"), liquid()),
+        )),
+        move |span, (c1,c2)| span.error(format!("{c1} cannot be followed by {c2} in an initial pair."))
+    );
 
-    let second_hyphen = || {
-        single_hyphen()
-            .then_error(|span, _| {
-                span.expand_before(1)
-                    .error("Only one hyphen is allowed in a row.")
-            })
-            .opt()
-    };
+    pub vowel[u8 => char] = raw_letter(b"ieaou");
+    pub voiced[u8 => char] = raw_letter(b"bdgvzj");
+    pub unvoiced[u8 => char] = raw_letter(b"ptkfsc");
+    pub sibilant[u8 => char] = raw_letter(b"szcj");
+    pub plosive[u8 => char] = raw_letter(b"tdkgpb");
+    pub sonorant[u8 => char] = raw_letter(b"nrl");
+    pub liquid[u8 => char] = raw_letter(b"lr");
 
-    let new_lines = || one_of(b"\n\r").repeated(..);
+    pub letter_h[u8 => char] = raw_letter(b"h").then_peek(deny_hyphen_after_h());
+    deny_hyphen_after_h[u8 => ()] = deny(
+        one_of(b"-"),
+        |span, _| span.error("An hyphen cannot appear after an 'h', and should appear before instead.")
+    );
 
-    single_hyphen()
-        .then_peek(second_hyphen())
-        .then(new_lines())
-        .discard()
-}
+    pub hyphen_opt[u8 => ()] = hyphen().opt().discard();
+    hyphen[u8 => ()] = single_hyphen().then_peek(deny_repeated_hyphen()).then(new_lines()).discard();
+    deny_repeated_hyphen[u8 => ()] = deny(
+        single_hyphen(),
+        |span, _| span.error("Only one hyphen is allowed in a row.")
+    );
+    single_hyphen[u8 => String] = choice((
+        exact_utf8("\u{2010}"), // ‐ HYPHEN
+        exact_utf8("\u{2014}"), // — EM DASH
+        exact_utf8("\u{002D}"), // - HYPHEN-MINUS
+    ));
 
-pub fn hyphen_opt<S>() -> impl Parser<S, u8, (), Error = crate::Error> {
-    hyphen().opt().discard()
-}
-
-pub fn raw_letter<S>(choices: &[u8]) -> impl Parser<S, u8, char, Error = crate::Error> {
-    let repeat_after_hyphen = |pattern| {
-        hyphen_opt()
-            .then(one_of(pattern))
-            .then_error(|span, _| {
-                span.expand_before(1)
-                    .error("The same letter cannot appear both before and after an hyphen.")
-            })
-            .opt()
-    };
-
-    choice(
+    /// Letter with repeating.
+    pub raw_letter(choices: &[u8])[u8 => char] = choice(
         choices
-            .into_iter()
+            .iter()
             .map(|&c| {
                 let pattern = [c.to_ascii_lowercase(), c.to_ascii_uppercase()];
                 let out = char::from(c);
 
                 one_of(pattern)
                     .repeated(1..)
-                    .then_peek(repeat_after_hyphen(pattern))
+                    .then_peek(deny_letter_repeat_after_pattern(pattern))
                     .map(move |_| out)
             })
             .collect::<Vec<_>>(),
-    )
-}
+    );
+    deny_letter_repeat_after_pattern(pattern: [u8; 2])[u8 => ()] = deny(
+        hyphen_opt().then(one_of(pattern)),
+        |span, _| span.error("The same letter cannot appear both before and after an hyphen.")
+    );
 
-pub fn vowel<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    raw_letter(b"ieaou")
-}
+    pub new_lines[u8 => ()] = one_of(b"\n\r").repeated(..).discard();
+);
 
-pub fn voiced<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    raw_letter(b"bdgvzj")
-}
+rule!(raw_consonant, u8 => char, raw_letter(b"nrlmpbfvtdszcjgk"));
 
-pub fn unvoiced<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    raw_letter(b"ptkfsc")
-}
-
-pub fn sibilant<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    raw_letter(b"szcj")
-}
-
-pub fn plosive<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    raw_letter(b"tdkgpb")
-}
-
-pub fn sonorant<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    raw_letter(b"nrl")
-}
-
-pub fn liquid<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    raw_letter(b"lr")
-}
-
-pub fn letter_h<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    raw_letter(b"h")
-        .spanned()
-        .then_peek_with(move |(span_h, _)| {
-            one_of(b"-")
-                .then_error(move |_, _| {
-                    span_h.expand_after(1).error(
-                        "An hyphen cannot appear after an 'h', and should appear before instead.",
-                    )
-                })
-                .opt()
-        })
-        .map(|(_, h)| h)
-}
-
-pub fn other<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    let error = move |c1, c2| format!("{c1} cannot be followed by {c2} in an initial pair.");
-
-    choice((
-        raw_letter(b"vfkgm"),
-        raw_letter(b"pb").then_peek_with(move |c1| {
-            hyphen_opt().then(
-                raw_letter(b"n")
-                    .then_error(move |span, c2| span.error(error(c1, c2)))
-                    .opt(),
-            )
-        }),
-        raw_letter(b"td").then_peek_with(move |c1| {
-            hyphen_opt().then(
-                raw_letter(b"nl")
-                    .then_error(move |span, c2| span.error(error(c1, c2)))
-                    .opt(),
-            )
-        }),
-        raw_letter(b"n").then_peek_with(move |c1| {
-            hyphen_opt().then(
-                liquid()
-                    .then_error(move |span, c2| span.error(error(c1, c2)))
-                    .opt(),
-            )
-        }),
-    ))
-}
-
-pub fn raw_consonant<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    raw_letter(b"nrlmpbfvtdszcjgk")
-}
-
-/// Parse a single consonant with morphology checks.
-pub fn consonant<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
-    let error1 = move |((c1, _), c2)| {
-        format!("A sibilant ({c1}) cannot be followed by another sibilant ({c2}).")
-    };
-    let error2 = move |((c1, _), c2)| {
+// Parse a single consonant with morphology checks.
+rule!(pub consonant, u8 => char, {
+    let error1 =
+        |(c1, c2)| format!("A sibilant ({c1}) cannot be followed by another sibilant ({c2}).");
+    let error2 = |(c1, c2)| {
         format!("A voiced consonant ({c1}) cannot be followed by an unvoiced one ({c2}).")
     };
-    let error3 = move |((c1, _), c2)| {
+    let error3 = |(c1, c2)| {
         format!("An unvoiced consonant ({c1}) cannot be followed by an voiced one ({c2}).")
     };
 
     // we use `nil().then_peek(...)` to first check for many forbidden patterns.
     nil()
         .then_peek(choice((
-            sibilant()
-                .then(hyphen_opt())
-                .then(sibilant())
+            pair_hyphen_opt(sibilant(), sibilant())
                 .then_error(move |span, pair| span.error(error1(pair))),
-            voiced()
-                .then(hyphen_opt())
-                .then(unvoiced())
+            pair_hyphen_opt(voiced(), unvoiced())
                 .then_error(move |span, pair| span.error(error2(pair))),
-            unvoiced()
-                .then(hyphen_opt())
-                .then(voiced())
+            pair_hyphen_opt(unvoiced(), voiced())
                 .then_error(move |span, pair| span.error(error3(pair))),
             nil(), // No forbidden pattern found, we successfully parse `()`.
         )))
@@ -168,7 +104,7 @@ pub fn consonant<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
         .then(raw_consonant())
         // An get rid of the `()` produced by `nil`.
         .map(|(_, out)| out)
-}
+});
 
 pub fn initial_consonant<S>() -> impl Parser<S, u8, char, Error = crate::Error> {
     nil()
@@ -264,7 +200,6 @@ pub fn consonant_triplet<S>() -> impl Parser<S, u8, (char, char, char), Error = 
         .then(hyphen_opt())
         .then(initial_pair());
 
-
     nil()
         .then_peek(choice((consonant_pattern_1,)))
         .then(consonant())
@@ -313,17 +248,16 @@ pub fn digit<S>() -> impl Parser<S, u8, u8, Error = crate::Error> {
     one_of(b'0'..=b'9').map(|digit| digit - b'0')
 }
 
+rule!(non_space, u8 => (), choice((
+    pause(),
+    digit().discard(),
+    hyphen(),
+    one_of(b'a'..=b'z').discard(),
+    one_of(b'A'..=b'Z').discard(),
+)));
+
 pub fn space<S>() -> impl Parser<S, u8, (), Error = crate::Error> {
-    nil()
-        .then_peek(not(choice((
-            pause(),
-            digit().discard(),
-            hyphen(),
-            one_of(b'a'..=b'z').discard(),
-            one_of(b'A'..=b'Z').discard(),
-        ))))
-        .then(any())
-        .discard()
+    nil().then_peek(not(non_space())).then(any()).discard()
 }
 
 #[cfg(test)]
@@ -365,12 +299,11 @@ mod tests {
 
         for c1 in b'a'..=b'z' {
             for c2 in b'a'..=b'z' {
-                assert_eq!(
+                assert!(
                     parser
                         .parse(&mut IterStream::new([c1, b'-', c2]))
                         .option_in_err()
-                        .is_ok(),
-                    false,
+                        .is_err(),
                     "Mismatch for {}-{}, initial pair cannot contain hyphen",
                     char::from(c1),
                     char::from(c2)

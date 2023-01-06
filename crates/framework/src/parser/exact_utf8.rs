@@ -1,6 +1,7 @@
-use std::marker::PhantomData;
-
-use crate::{OptionInErr, OptionInOk, ParseResult, Parser, Stream};
+use {
+    crate::{OptionInErr, OptionInOk, ParseResult, Parser, Stream},
+    std::marker::PhantomData,
+};
 
 /// See [`exact_utf8`].
 pub struct ExactUtf8<S, E>(String, PhantomData<(S, E)>);

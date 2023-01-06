@@ -49,6 +49,7 @@
 //! [`spanned`]: SpannedExt::spanned
 
 mod as_iter;
+mod macros;
 mod parser;
 mod span;
 mod stream;

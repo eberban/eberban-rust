@@ -45,3 +45,14 @@ pub trait Parser<S, I, O> {
     where
         S: Stream<I, Self::Error>;
 }
+
+/// Shortand to write a deny rule.
+/// If the pattern is encountered, provided closure is used to produce an error.
+/// Otherwise, parse nothing (`()`) succesfully without making progress.
+pub fn deny<S, I, O, P, F>(pattern: P, error: F) -> impl Parser<S, I, (), Error = P::Error>
+where
+    P: Parser<S, I, O>,
+    F: Fn(crate::Span, O) -> P::Error,
+{
+    pattern.then_error(error).opt().discard()
+}

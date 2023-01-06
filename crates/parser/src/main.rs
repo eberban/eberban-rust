@@ -1,8 +1,10 @@
-use ariadne::{Color, Label, Report, ReportKind, Source};
-use framework::*;
-use parser::{
-    morpho::{particle_form, post_word_check, root_form, spaces},
-    Error,
+use {
+    ariadne::{Color, Label, Report, ReportKind, Source},
+    framework::*,
+    parser::{
+        morpho::{particle_form, post_word_check, root_form, spaces},
+        Error,
+    },
 };
 
 #[derive(Debug, Clone)]

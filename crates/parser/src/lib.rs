@@ -1,5 +1,4 @@
-use easy_ext::ext;
-use framework::Span;
+use {easy_ext::ext, framework::Span};
 
 pub mod morpho;
 

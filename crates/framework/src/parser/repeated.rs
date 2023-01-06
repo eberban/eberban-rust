@@ -1,5 +1,7 @@
-use std::marker::PhantomData;
-use std::ops::{Bound, RangeBounds};
+use std::{
+    marker::PhantomData,
+    ops::{Bound, RangeBounds},
+};
 
 use easy_ext::ext;
 
