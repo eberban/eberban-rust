@@ -4,4 +4,5 @@ members = [
     "crates/framework",
     "crates/parser",
     "crates/parser2",
+    "crates/lexer"
 ]
