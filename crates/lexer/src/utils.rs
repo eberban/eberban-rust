@@ -1,4 +1,7 @@
-use std::ops::Range;
+use std::{
+    fmt::{Debug, Display},
+    ops::Range,
+};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -66,7 +69,7 @@ impl<'a, T> Reader<'a, T> {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
@@ -99,7 +102,19 @@ impl From<Range<usize>> for Span {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+impl Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}..{}", self.start, self.end)
+    }
+}
+
+impl Debug for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}..{}", self.start, self.end)
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Spanned<T> {
     pub value: T,
     pub span: Span,
@@ -113,4 +128,16 @@ pub fn err<T>(span: impl Into<Span>, message: impl ToString) -> Result<T> {
 
 pub fn ok<T>(span: impl Into<Span>, value: T) -> Result<Spanned<T>> {
     Ok(span.into().wrap(value))
+}
+
+impl<T: Display> Display for Spanned<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}@{})", self.value, self.span)
+    }
+}
+
+impl<T: Debug> Debug for Spanned<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({:?}@{})", self.value, self.span)
+    }
 }

@@ -15,7 +15,7 @@ fn classify_letter(c: u8) -> Symbol {
     match c {
         c if is_vowel(c) => Symbol::Vowel(c),
         c if is_sonorant(c) => Symbol::Sonorant(c),
-        c if is_consonant(c) => Symbol::Sonorant(c),
+        c if is_consonant(c) => Symbol::Consonant(c),
         b'h' => Symbol::H,
         _ => panic!("not a letter"),
     }
