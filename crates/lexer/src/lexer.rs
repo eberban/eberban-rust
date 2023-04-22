@@ -9,8 +9,14 @@ pub enum Lexeme {
     Root(String),
     Borrowing(String),
     FreeformVariable(String),
-    Compound(Vec<Lexeme>),
-    ForeignQuote { delimiter: String, quote: Vec<u8> },
+    Compound {
+        parts: Vec<Spanned<Lexeme>>,
+        invert_transitivity: bool,
+    },
+    ForeignQuote {
+        delimiter: String,
+        quote: Vec<u8>,
+    },
     SpellingQuote(Vec<String>),
 }
 
@@ -36,6 +42,7 @@ pub struct Lexer<'a> {
     current_word: Vec<u8>,
     word_start: usize,
     mode: Mode,
+    in_compound: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -61,6 +68,7 @@ impl<'a> Lexer<'a> {
             state: LexerState::Space,
             current_word: Vec::new(),
             mode: Mode::ParticleOrRoot,
+            in_compound: false,
         }
     }
 
@@ -82,132 +90,143 @@ impl<'a> Lexer<'a> {
                     LexerState::VH(s) => return err(s..end, "Text ended with incomplete lexeme: lexemes cannot end with H.")
                 }
 
-                let lexeme = self.end_lexeme(0);
-
-                self.state = LexerState::Space;
-                self.word_start = end;
-
-                return Ok(Some(span.wrap(lexeme)));
+                return self.end_lexeme(0, end, LexerState::Space);
             }
 
             let Spanned { value, span } = parse_symbol(self.reader)?;
             let Span { start, end } = span;
 
-            println!("    {:?} - {span:?} - {value:?}", self.state);
+            // println!("    {:?} - {span:?} - {value:?}", self.state);
 
             self.state = match (self.state, value) {
-            (LexerState::Space, Symbol::Space) => {
-                self.word_start = end;
-                LexerState::Space
-            },
-            (LexerState::Space, Symbol::Consonant(c)) => LexerState::C(span.start, c),
-            (LexerState::Space, Symbol::Vowel(_v)) => return err(span, "todo space + vowel"),
-            (LexerState::Space, Symbol::Pause) => return err(span, "todo space + pause"),
-            (LexerState::Space, Symbol::Sonorant(_)) => return err(span, "A word cannot start with a sonorant."),
-            (LexerState::Space, Symbol::Hyphen) => return err(span, "A word cannot start with an hyphen."),
-            (LexerState::Space, Symbol::H) => return err(span, "A word cannot start with an H."),
-            // C
-            (LexerState::C(s, c1), Symbol::Consonant(c2)) if is_initial_pair(c1, c2) => {
-                self.mode.root_pattern_detected();
-                LexerState::CI(s, c1, c2)
-            }
-            (LexerState::C(s, c), Symbol::Vowel(v)) => {
-                self.current_word.extend_from_slice(&[c, v]);
-                self.word_start = s;
-                LexerState::V(start)
-            }
-            (LexerState::C(s, _), Symbol::H) => return err(s.. end, "An H cannot appear after the first consonant of a word."),
-            (LexerState::C(s, _), Symbol::Hyphen) => return err(s.. end, "An hyphen cannot appear after the first consonant of a word."),
-            (LexerState::C(s, _), Symbol::Space) => return err(s.. end, "A space cannot appear after the first consonant of a word."),
-            (LexerState::C(s, _), Symbol::Pause) => return err(s..end, "A pause cannot appear after the first consonant of a word."),
-            (LexerState::C(s, c1), Symbol::Consonant(c2)) => {
-                return err(s..end, format!("A word can only start with 2 consonants if they form an initial pair, which '{}{}' is not.", c1 as char, c2 as char))
-            }
-            (LexerState::C(s, c1), Symbol::Sonorant(c2)) => {
-                if !is_initial_pair(c1, c2) {
-                    return err(s..end, format!("A word can only start with a consonant followed by a sonorant if they form an initial pair, which '{}{}' is not.", c1 as char, c2 as char))
+                (LexerState::Space, Symbol::Space) => {
+                    self.word_start = end;
+                    LexerState::Space
+                },
+                (LexerState::Space, Symbol::Consonant(c)) => LexerState::C(span.start, c),
+                (LexerState::Space, Symbol::Vowel(b'e')) => {
+                    if self.in_compound {
+                        return err(span, "Compounds cannot be nested.");
+                    }
+
+                    let mut parts = vec![];
+
+                    self.in_compound = true;
+                    for i in 0..2 {
+                        let Some(part) = self.next_lexeme()? else {
+                            return err(start..self.reader.cursor(), format!("Reached end of text after {i}/2 expected compound parts"));
+                        };
+
+                        match part.value {
+                            Lexeme::Root(_) | Lexeme::Particle(_) => (),
+                            Lexeme::Borrowing(_) if i == 0 => (),
+                            Lexeme::Borrowing(_) => return err(part.span, format!("Borrowings cannot appear in a compound except in first position.")),
+                            _ => unreachable!("other lexeme types should not be produced inside compounds")
+                        }
+
+                        parts.push(part);
+                    }
+                    self.in_compound = false;
+
+                    let span: Span = (start..parts.last().expect("at least one part").span.end).into();
+
+                    return Ok(Some(span.wrap(Lexeme::Compound {parts, invert_transitivity: false })));
                 }
+                (LexerState::Space, Symbol::Vowel(v)) => unreachable!("{} is not a vowel", v as char),
+                (LexerState::Space, Symbol::Pause) => return err(span, "todo space + pause"),
+                (LexerState::Space, Symbol::Sonorant(_)) => return err(span, "A word cannot start with a sonorant."),
+                (LexerState::Space, Symbol::Hyphen) => return err(span, "A word cannot start with an hyphen."),
+                (LexerState::Space, Symbol::H) => return err(span, "A word cannot start with an H."),
+                // C
+                (LexerState::C(s, c1), Symbol::Consonant(c2)) if is_initial_pair(c1, c2) => {
+                    self.mode.root_pattern_detected();
+                    LexerState::CI(s, c1, c2)
+                }
+                (LexerState::C(s, c), Symbol::Vowel(v)) => {
+                    self.current_word.extend_from_slice(&[c, v]);
+                    self.word_start = s;
+                    LexerState::V(start)
+                }
+                (LexerState::C(s, _), Symbol::H) => return err(s.. end, "An H cannot appear after the first consonant of a word."),
+                (LexerState::C(s, _), Symbol::Hyphen) => return err(s.. end, "An hyphen cannot appear after the first consonant of a word."),
+                (LexerState::C(s, _), Symbol::Space) => return err(s.. end, "A space cannot appear after the first consonant of a word."),
+                (LexerState::C(s, _), Symbol::Pause) => return err(s..end, "A pause cannot appear after the first consonant of a word."),
+                (LexerState::C(s, c1), Symbol::Consonant(c2)) => {
+                    return err(s..end, format!("A word can only start with 2 consonants if they form an initial pair, which '{}{}' is not.", c1 as char, c2 as char))
+                }
+                (LexerState::C(s, c1), Symbol::Sonorant(c2)) => {
+                    if !is_initial_pair(c1, c2) {
+                        return err(s..end, format!("A word can only start with a consonant followed by a sonorant if they form an initial pair, which '{}{}' is not.", c1 as char, c2 as char))
+                    }
 
-                return err(s..end, format!("TODO: CS"))
-            }
-            // CI
-            (LexerState::CI(_, c1,c2), Symbol::Vowel(v)) => {
-                self.current_word.extend_from_slice(&[c1, c2, v]);
-                LexerState::V(start)
-            }
-            (LexerState::CI(s, _,_), Symbol::H) => return err(s..end, "An H cannot appear after an initial pair."),
-            (LexerState::CI(s, _,_), Symbol::Hyphen) => return err(s..end, "An hyphen cannot appear after an initial pair."),
-            (LexerState::CI(s, _,_), Symbol::Space) => return err(s..end, "A space cannot appear after an initial pair."),
-            (LexerState::CI(s, _,_), Symbol::Consonant(_)) => return err(s..end, "A consonant cannot appear after an initial pair."),
-            (LexerState::CI(s, _,_), Symbol::Sonorant(_)) => return err(s..end, "A sonorant cannot appear after an initial pair."),
-            (LexerState::CI(s, _,_), Symbol::Pause) => return err(s..end, "A pause cannot appear after an initial pair."),
-            // V
-            (LexerState::V(_), Symbol::Vowel(v)) => {
-                self.current_word.push(v);
-                LexerState::V(start)
-            }
-            (LexerState::V(_), Symbol::Consonant(_)) => return err(span, "todo vowel + consonant"),
-            (LexerState::V(s), Symbol::Sonorant(c)) => {
-                self.mode.root_pattern_detected();
-                LexerState::VS(s, c)
-            },
-            (LexerState::V(_), Symbol::Pause) => return err(span, "todo vowel + pause"),
-            (LexerState::V(_), Symbol::Hyphen) => return err(span, "todo vowel + hyphen"),
-            (LexerState::V(_), Symbol::Space) => {
-                let span: Span = (self.word_start..start).into();
-                let lexeme = self.end_lexeme(0);
+                    return err(s..end, format!("TODO: CS"))
+                }
+                // CI
+                (LexerState::CI(_, c1,c2), Symbol::Vowel(v)) => {
+                    self.current_word.extend_from_slice(&[c1, c2, v]);
+                    LexerState::V(start)
+                }
+                (LexerState::CI(s, _,_), Symbol::H) => return err(s..end, "An H cannot appear after an initial pair."),
+                (LexerState::CI(s, _,_), Symbol::Hyphen) => return err(s..end, "An hyphen cannot appear after an initial pair."),
+                (LexerState::CI(s, _,_), Symbol::Space) => return err(s..end, "A space cannot appear after an initial pair."),
+                (LexerState::CI(s, _,_), Symbol::Consonant(_)) => return err(s..end, "A consonant cannot appear after an initial pair."),
+                (LexerState::CI(s, _,_), Symbol::Sonorant(_)) => return err(s..end, "A sonorant cannot appear after an initial pair."),
+                (LexerState::CI(s, _,_), Symbol::Pause) => return err(s..end, "A pause cannot appear after an initial pair."),
+                // V
+                (LexerState::V(_), Symbol::Vowel(v)) => {
+                    self.current_word.push(v);
+                    LexerState::V(start)
+                }
+                (LexerState::V(_), Symbol::Consonant(_)) => return err(span, "todo vowel + consonant"),
+                (LexerState::V(s), Symbol::Sonorant(c)) => {
+                    self.mode.root_pattern_detected();
+                    LexerState::VS(s, c)
+                },
+                (LexerState::V(_), Symbol::Pause) => return err(span, "todo vowel + pause"),
+                (LexerState::V(_), Symbol::Hyphen) => return err(span, "todo vowel + hyphen"),
+                (LexerState::V(_), Symbol::Space) => {
+                    return self.end_lexeme(0, start, LexerState::Space);
+                },
+                (LexerState::V(s), Symbol::H) => LexerState::VH(s),
+                // VH
+                (LexerState::VH(_), Symbol::Vowel(v)) => {
+                    self.current_word.extend_from_slice(&[b'h', v]);
+                    LexerState::V(start)
+                }
+                (LexerState::VH(s), _) => return err(s..end, "An H can only be followed by a vowel."),
+                // VS
+                (LexerState::VS(_, c), Symbol::Vowel(v)) => {
+                    self.current_word.extend_from_slice(&[c, v]);
+                    LexerState::V(start)
+                }
+                (LexerState::VS(_, c), Symbol::Consonant(c1)) => {
+                    self.current_word.extend_from_slice(&[c]);
+                    return self.end_lexeme(0, start, LexerState::C(start, c1));
 
-                self.state = LexerState::Space;
-                self.word_start = start;
-
-                return Ok(Some(span.wrap(lexeme)));
-            },
-            (LexerState::V(s), Symbol::H) => LexerState::VH(s),
-            // VH
-            (LexerState::VH(_), Symbol::Vowel(v)) => {
-                self.current_word.extend_from_slice(&[b'h', v]);
-                LexerState::V(start)
-            }
-            (LexerState::VH(s), _) => return err(s..end, "An H can only be followed by a vowel."),
-            // VS
-            (LexerState::VS(_, c), Symbol::Vowel(v)) => {
-                self.current_word.extend_from_slice(&[c, v]);
-                LexerState::V(start)
-            }
-            (LexerState::VS(_, c), Symbol::Consonant(c1)) => {
-                self.current_word.extend_from_slice(&[c]);
-                let span: Span = (self.word_start..start).into();
-                let lexeme = self.end_lexeme(0);
-
-                self.state = LexerState::C(start, c1);
-                self.word_start = start;
-
-                return Ok(Some(span.wrap(lexeme)));
-            }
-            (LexerState::VS(_, c1), Symbol::Sonorant(c2)) if is_medial_pair(c1, c2) => {
-                return err(span, "todo sonorant medial pair");
-            }
-            (LexerState::VS(s, c1), Symbol::Sonorant(c2)) => {
-                return err(s..end, format!("2 sonorants are only allowed in a row if they form a medial pair, which is not the case of '{}{}'", c1 as char, c2 as char));
-            }
-            (LexerState::VS(s, _), Symbol::H) => return err(s..end, "An H can only appear between 2 vowels."),
-            (LexerState::VS(_, _), Symbol::Pause) => return err(span, "todo sonorant followed by pause"),
-            (LexerState::VS(_, _), Symbol::Hyphen) => return err(span, "todo sonorant followed by hyphen"),
-            (LexerState::VS(_, c), Symbol::Space) => {
-                self.current_word.extend_from_slice(&[c]);
-                let span: Span = (self.word_start..start).into();
-                let lexeme = self.end_lexeme(0);
-
-                self.state = LexerState::Space;
-                self.word_start = start;
-
-                return Ok(Some(span.wrap(lexeme)));
-            }
+                }
+                (LexerState::VS(_, c1), Symbol::Sonorant(c2)) if is_medial_pair(c1, c2) => {
+                    return err(span, "todo sonorant medial pair");
+                }
+                (LexerState::VS(s, c1), Symbol::Sonorant(c2)) => {
+                    return err(s..end, format!("2 sonorants are only allowed in a row if they form a medial pair, which is not the case of '{}{}'", c1 as char, c2 as char));
+                }
+                (LexerState::VS(s, _), Symbol::H) => return err(s..end, "An H can only appear between 2 vowels."),
+                (LexerState::VS(_, _), Symbol::Pause) => return err(span, "todo sonorant followed by pause"),
+                (LexerState::VS(_, _), Symbol::Hyphen) => return err(span, "todo sonorant followed by hyphen"),
+                (LexerState::VS(_, c), Symbol::Space) => {
+                    self.current_word.extend_from_slice(&[c]);
+                    return self.end_lexeme(0, start, LexerState::Space);
+                }
             }
         }
     }
 
-    fn end_lexeme(&mut self, leftover: usize) -> Lexeme {
+    fn end_lexeme(
+        &mut self,
+        leftover: usize,
+        word_end: usize,
+        new_state: LexerState,
+    ) -> Result<Option<Spanned<Lexeme>>> {
         // We extract the last N characters.
         let mut split = self
             .current_word
@@ -216,6 +235,7 @@ impl<'a> Lexer<'a> {
         // Those last N characters are what are left in the current_word buffer.
         std::mem::swap(&mut split, &mut self.current_word);
 
+        let span: Span = (self.word_start..word_end).into();
         let lexeme = String::from_utf8(split).expect("constructed manually, should always be utf8");
 
         let lexeme = match self.mode {
@@ -226,8 +246,10 @@ impl<'a> Lexer<'a> {
         };
 
         self.mode = Mode::ParticleOrRoot;
+        self.state = new_state;
+        self.word_start = word_end;
 
-        lexeme
+        Ok(Some(span.wrap(lexeme)))
     }
 }
 
@@ -288,4 +310,35 @@ fn is_initial_pair(c1: u8, c2: u8) -> bool {
 
 fn is_medial_pair(_c1: u8, _c2: u8) -> bool {
     todo!()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initial_pairs() {
+        let initial_pairs: Vec<_> = [
+            "bj", "bz", "bl", "br", "cf", "ck", "cm", "cp", "ct", "cn", "cl", "cr", "dj", "dz",
+            "dr", "fc", "fs", "fn", "fl", "fr", "gj", "gz", "gn", "gl", "gr", "jb", "jd", "jg",
+            "jm", "jv", "jn", "jl", "jr", "kc", "ks", "kn", "kl", "kr", "mn", "ml", "mr", "pc",
+            "ps", "pl", "pr", "sf", "sk", "sm", "sp", "st", "sn", "sl", "sr", "tc", "ts", "tr",
+            "vj", "vz", "vn", "vl", "vr", "zb", "zd", "zg", "zm", "zv", "zn", "zl", "zr",
+        ]
+        .map(|word| word.as_bytes())
+        .into_iter()
+        .collect();
+
+        for c1 in b'a'..=b'z' {
+            for c2 in b'a'..=b'z' {
+                assert_eq!(
+                    is_initial_pair(c1, c2),
+                    initial_pairs.contains(&&[c1, c2][..]),
+                    "Mismatch for {}{}",
+                    char::from(c1),
+                    char::from(c2)
+                );
+            }
+        }
+    }
 }

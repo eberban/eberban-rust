@@ -4,22 +4,25 @@ use lexer::{lexer::Lexer, utils::Reader};
 
 fn main() {
     loop {
-        print!("\n> ");
-        let _ = std::io::stdout().flush();
+        prompt()
+    }
+}
 
-        let mut line = String::new();
-        std::io::stdin().read_line(&mut line).expect("to read line");
+fn prompt() {
+    print!("\n> ");
+    let _ = std::io::stdout().flush();
 
-        let mut reader = Reader::new(line.as_bytes());
-        let mut lexer = Lexer::new(&mut reader);
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line).expect("to read line");
 
-        loop {
-            let lexeme = lexer.next_lexeme();
-            println!("{lexeme:?}");
+    let mut reader = Reader::new(line.as_bytes());
+    let mut lexer = Lexer::new(&mut reader);
 
-            if let Err(_) | Ok(None) = lexeme {
-                break;
-            }
+    loop {
+        match lexer.next_lexeme() {
+            Err(e) => return println!("Error: {e:?}"),
+            Ok(None) => return,
+            Ok(Some(l)) => println!("  {l:?}"),
         }
     }
 }
